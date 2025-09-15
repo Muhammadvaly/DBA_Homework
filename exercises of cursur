@@ -1,0 +1,469 @@
+Name.  Waly sultany.           Father name.  Muhammad hashim
+PL/SQL Cursor Exercises — Questions and Solutions
+Exercise 1: High Salary Report
+Question:
+Write a PL/SQL program using a cursor to display all employees who earn more than the average salary of their department. Show employee name, salary, and department name.
+
+Solution (PL/SQL):
+DECLARE
+  CURSOR c_emp IS
+    SELECT e.first_name || ' ' || e.last_name AS emp_name,
+           e.salary,
+           d.dept_name
+    FROM employees e
+    JOIN departments d ON e.dept_id = d.dept_id
+    WHERE e.salary >
+      (SELECT AVG(salary) FROM employees WHERE dept_id = e.dept_id);
+  v_rec c_emp%ROWTYPE;
+BEGIN
+  OPEN c_emp;
+  LOOP
+    FETCH c_emp INTO v_rec;
+    EXIT WHEN c_rec%ROWCOUNT = 0 OR c_emp%NOTFOUND; -- safe exit
+    DBMS_OUTPUT.PUT_LINE('Name: ' || v_rec.emp_name ||
+                         ' | Salary: ' || TO_CHAR(v_rec.salary) ||
+                         ' | Dept: ' || v_rec.dept_name);
+  END LOOP;
+  CLOSE c_emp;
+END;
+/
+
+
+
+Exercise 2: Salary Increment by Department
+Question:
+Use a cursor to go through each employee in the IT department and increase their salary by 10%, then display the updated salaries.
+
+Solution (PL/SQL):
+
+DECLARE
+  v_it_dept_id departments.dept_id%TYPE;
+  CURSOR c_it IS
+    SELECT emp_id, first_name || ' ' || last_name AS name, salary
+    FROM employees
+    WHERE dept_id = (SELECT dept_id FROM departments WHERE dept_name = 'IT');
+  v_rec c_it%ROWTYPE;
+BEGIN
+  FOR v_rec IN c_it LOOP
+    UPDATE employees
+    SET salary = ROUND(v_rec.salary * 1.10, 2)
+    WHERE emp_id = v_rec.emp_id;
+    DBMS_OUTPUT.PUT_LINE('Updated ' || v_rec.name || ' -> ' ||
+                         TO_CHAR(ROUND(v_rec.salary * 1.10,2)));
+  END LOOP;
+  COMMIT;
+END;
+/
+
+
+
+Exercise 3: Customer Orders Summary
+Question:
+Write a cursor-based program to list all customers who have placed orders in the last 30 days. For each customer, display the total number of orders and the total order amount.
+
+Solution (PL/SQL):
+
+DECLARE
+  CURSOR c_cust IS
+    SELECT c.customer_id, c.customer_name
+    FROM customers c
+    WHERE EXISTS (
+      SELECT 1 FROM orders o
+      WHERE o.customer_id = c.customer_id
+        AND o.order_date >= TRUNC(SYSDATE) - 30
+    );
+  v_id customers.customer_id%TYPE;
+  v_name customers.customer_name%TYPE;
+  v_count NUMBER;
+  v_total NUMBER;
+BEGIN
+  OPEN c_cust;
+  LOOP
+    FETCH c_cust INTO v_id, v_name;
+    EXIT WHEN c_cust%NOTFOUND;
+    SELECT COUNT(*), NVL(SUM(total_amt),0)
+      INTO v_count, v_total
+    FROM orders
+    WHERE customer_id = v_id
+      AND order_date >= TRUNC(SYSDATE) - 30;
+    DBMS_OUTPUT.PUT_LINE('Customer: '||v_name||' | Orders: '||v_count||' | Total: '||TO_CHAR(v_total));
+  END LOOP;
+  CLOSE c_cust;
+END;
+/
+
+
+
+Exercise 4: Pending Payments Reminder
+Question:
+Using a cursor, find all invoices that are overdue by more than 60 days and print customer name, invoice ID, due date, and pending amount.
+
+Solution (PL/SQL):
+
+DECLARE
+  CURSOR c_inv IS
+    SELECT i.invoice_id, i.customer_id, i.due_date, (i.amount - NVL(i.paid_amount,0)) AS pending
+    FROM invoices i
+    WHERE (TRUNC(SYSDATE) - TRUNC(i.due_date)) > 60
+      AND (i.amount - NVL(i.paid_amount,0)) > 0;
+  v_rec c_inv%ROWTYPE;
+  v_cust_name customers.customer_name%TYPE;
+BEGIN
+  FOR v_rec IN c_inv LOOP
+    SELECT customer_name INTO v_cust_name FROM customers WHERE customer_id = v_rec.customer_id;
+    DBMS_OUTPUT.PUT_LINE('Customer: '||v_cust_name||' | Invoice: '||v_rec.invoice_id||
+                         ' | Due: '||TO_CHAR(v_rec.due_date,'YYYY-MM-DD')||
+                         ' | Pending: '||TO_CHAR(v_rec.pending));
+  END LOOP;
+END;
+/
+
+
+
+Exercise 5: Top N Employees per Department
+Question:
+Using a cursor, display the top 3 highest-paid employees in each department. Show department name, employee name, and salary.
+
+
+Solution (PL/SQL):
+
+DECLARE
+  CURSOR c_dept IS SELECT dept_id, dept_name FROM departments;
+  TYPE t_emp_rec IS RECORD (dept_name VARCHAR2(100), emp_name VARCHAR2(200), salary NUMBER);
+  v_dept departments.dept_id%ROWTYPE;
+BEGIN
+  FOR d IN c_dept LOOP
+    DBMS_OUTPUT.PUT_LINE('Department: '||d.dept_name);
+    FOR r IN (SELECT first_name || ' ' || last_name AS name, salary
+              FROM employees
+              WHERE dept_id = d.dept_id
+              ORDER BY salary DESC
+              FETCH FIRST 3 ROWS ONLY) LOOP
+      DBMS_OUTPUT.PUT_LINE('  '||r.name||' | '||TO_CHAR(r.salary));
+    END LOOP;
+  END LOOP;
+END;
+/
+
+
+
+Exercise 6: Low Stock Alert
+Question:
+Write a cursor to scan the products table and display all products where the stock quantity is less than 10. Show product name, category, and current stock.
+
+Solution (PL/SQL):
+
+DECLARE
+  CURSOR c_prod IS
+    SELECT product_name, category, stock_qty
+    FROM products
+    WHERE stock_qty < 10;
+BEGIN
+  FOR p IN c_prod LOOP
+    DBMS_OUTPUT.PUT_LINE('Product: '||p.product_name||' | Category: '||p.category||' | Stock: '||p.stock_qty);
+  END LOOP;
+END;
+/
+
+
+
+Exercise 7: Student Performance Report
+Question:
+Using a cursor, list all students who scored below the class average in the latest exam. Show student name, subject, and marks.
+
+Solution (PL/SQL):
+
+DECLARE
+  v_latest_exam_id exams.exam_id%TYPE;
+  CURSOR c_below IS
+    SELECT s.student_name, r.subject, r.marks
+    FROM results r
+    JOIN students s ON r.student_id = s.student_id
+    WHERE r.exam_id = (SELECT MAX(exam_id) FROM exams)
+      AND r.marks < (SELECT AVG(marks) FROM results WHERE exam_id = (SELECT MAX(exam_id) FROM exams));
+BEGIN
+  FOR rec IN c_below LOOP
+    DBMS_OUTPUT.PUT_LINE('Student: '||rec.student_name||' | Subject: '||rec.subject||' | Marks: '||rec.marks);
+  END LOOP;
+END;
+/
+
+
+
+Exercise 8: Employee Anniversary
+Question:
+Write a cursor program to find employees who are completing 5 years, 10 years, or 15 years in the company this month. Display employee name, hire date, and years completed.
+
+Solution (PL/SQL):
+
+DECLARE
+  v_today_month NUMBER := TO_NUMBER(TO_CHAR(SYSDATE,'MM'));
+  CURSOR c_ann IS
+    SELECT first_name || ' ' || last_name AS name, hire_date,
+           TRUNC(MONTHS_BETWEEN(TRUNC(SYSDATE), TRUNC(hire_date))/12) AS years_completed
+    FROM employees
+    WHERE TO_NUMBER(TO_CHAR(hire_date,'MM')) = v_today_month
+      AND TRUNC(MONTHS_BETWEEN(TRUNC(SYSDATE), TRUNC(hire_date))/12) IN (5,10,15);
+BEGIN
+  FOR r IN c_ann LOOP
+    DBMS_OUTPUT.PUT_LINE('Name: '||r.name||' | Hire Date: '||TO_CHAR(r.hire_date,'YYYY-MM-DD')||' | Years: '||r.years_completed);
+  END LOOP;
+END;
+/
+
+
+
+Exercise 9: Monthly Sales Commission
+Question:
+Use a cursor to calculate and display each salesperson’s total sales for the current month and compute a commission of 5%.
+
+Solution (PL/SQL):
+
+DECLARE
+  CURSOR c_sales IS
+    SELECT s.salesperson_id, e.first_name || ' ' || e.last_name AS name,
+           NVL(SUM(s.amount),0) AS total_sales
+    FROM sales s
+    JOIN employees e ON s.salesperson_id = e.employee_id
+    WHERE TRUNC(s.sale_date,'MM') = TRUNC(SYSDATE,'MM')
+    GROUP BY s.salesperson_id, e.first_name, e.last_name;
+BEGIN
+  FOR r IN c_sales LOOP
+    DBMS_OUTPUT.PUT_LINE('Salesperson: '||r.name||' | Total: '||TO_CHAR(r.total_sales)||
+                         ' | Commission(5%): '||TO_CHAR(ROUND(r.total_sales*0.05,2)));
+  END LOOP;
+END;
+/
+
+
+
+Exercise 10: Unused Accounts Cleanup
+Question:
+Write a cursor that identifies all user accounts that have been inactive for more than 1 year and mark them as “Inactive” in the database.
+
+Solution (PL/SQL):
+
+DECLARE
+  CURSOR c_inactive IS
+    SELECT user_id, username FROM users
+    WHERE NVL(last_login, TO_DATE('1900-01-01','YYYY-MM-DD')) < TRUNC(SYSDATE) - 365
+      AND status <> 'Inactive';
+BEGIN
+  FOR u IN c_inactive LOOP
+    UPDATE users SET status = 'Inactive' WHERE user_id = u.user_id;
+    DBMS_OUTPUT.PUT_LINE('Marked Inactive: '||u.username);
+  END LOOP;
+  COMMIT;
+END;
+/
+
+
+
+Exercise 11: Department Salary Budget Check
+Question:
+Write a cursor to calculate the total salary cost for each department. If the total salary exceeds 50,000, print a warning message along with the department name.
+
+Solution (PL/SQL):
+
+DECLARE
+  CURSOR c_dept IS
+    SELECT d.dept_id, d.dept_name
+    FROM departments d;
+  v_total NUMBER;
+BEGIN
+  FOR d IN c_dept LOOP
+    SELECT NVL(SUM(salary),0) INTO v_total FROM employees WHERE dept_id = d.dept_id;
+    IF v_total > 50000 THEN
+      DBMS_OUTPUT.PUT_LINE('WARNING: Dept '||d.dept_name||' total salary = '||TO_CHAR(v_total));
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Dept '||d.dept_name||' total salary = '||TO_CHAR(v_total));
+    END IF;
+  END LOOP;
+END;
+/
+
+
+
+Exercise 12: Employee Promotion Eligibility
+Question:
+Using a cursor, list employees who have worked for more than 5 years and earn less than their department average salary. These employees should be flagged as “Eligible for Promotion”.
+
+Solution (PL/SQL):
+
+DECLARE
+  CURSOR c_elig IS
+    SELECT e.emp_id, e.first_name || ' ' || e.last_name AS name, e.salary, e.dept_id,
+           TRUNC(MONTHS_BETWEEN(SYSDATE, e.hire_date)/12) AS years_worked
+    FROM employees e
+    WHERE TRUNC(MONTHS_BETWEEN(SYSDATE, e.hire_date)/12) > 5;
+  v_dept_avg NUMBER;
+BEGIN
+  FOR r IN c_elig LOOP
+    SELECT NVL(AVG(salary),0) INTO v_dept_avg FROM employees WHERE dept_id = r.dept_id;
+    IF r.salary < v_dept_avg THEN
+      DBMS_OUTPUT.PUT_LINE('Employee: '||r.name||' | Years: '||r.years_worked||' | Flag: Eligible for Promotion');
+    END IF;
+  END LOOP;
+END;
+/
+
+
+
+Exercise 13: Customer Loyalty Program
+Question:
+Create a parameterized cursor that takes a customer ID as input and lists all orders by that customer. For each order, calculate the loyalty points as total_amt / 10.
+
+Solution (PL/SQL):
+
+DECLARE
+  v_customer_id customers.customer_id%TYPE := &customer_id; -- replace or bind
+  CURSOR c_orders(p_cust_id NUMBER) IS
+    SELECT order_id, total_amt, order_date FROM orders WHERE customer_id = p_cust_id ORDER BY order_date;
+BEGIN
+  FOR o IN c_orders(v_customer_id) LOOP
+    DBMS_OUTPUT.PUT_LINE('Order: '||o.order_id||' | Amount: '||o.total_amt||' | Points: '||TO_CHAR(TRUNC(o.total_amt/10)));
+  END LOOP;
+END;
+/
+
+
+
+Exercise 14: Invoice Penalty Calculation
+Question:
+Using a cursor, find all pending invoices that are overdue. For each invoice, calculate a penalty of 2% per overdue month and display the updated payable amount.
+
+Solution (PL/SQL):
+
+DECLARE
+  CURSOR c_over IS
+    SELECT invoice_id, due_date, amount, NVL(paid_amount,0) AS paid
+    FROM invoices
+    WHERE NVL(paid_amount,0) < amount
+      AND due_date < TRUNC(SYSDATE);
+  v_over_months NUMBER;
+  v_penalty NUMBER;
+  v_payable NUMBER;
+BEGIN
+  FOR r IN c_over LOOP
+    v_over_months := TRUNC(MONTHS_BETWEEN(TRUNC(SYSDATE), TRUNC(r.due_date)));
+    IF v_over_months < 1 THEN
+      v_over_months := 1;
+    END IF;
+    v_penalty := r.amount * 0.02 * v_over_months;
+    v_payable := (r.amount - r.paid) + v_penalty;
+    DBMS_OUTPUT.PUT_LINE('Invoice: '||r.invoice_id||' | OverMonths: '||v_over_months||
+                         ' | Penalty: '||TO_CHAR(ROUND(v_penalty,2))||' | Payable: '||TO_CHAR(ROUND(v_payable,2)));
+  END LOOP;
+END;
+/
+
+
+
+Exercise 15: Product Restocking Suggestion
+Question:
+Write a cursor that checks all products in the Electronics category. If stock is below 10 units, mark it as “Critical”; if between 10 and 50, mark as “Low”; otherwise mark as “OK”.
+
+
+Solution (PL/SQL):
+
+DECLARE
+  CURSOR c_elec IS
+    SELECT product_id, product_name, stock_qty FROM products WHERE category = 'Electronics';
+BEGIN
+  FOR p IN c_elec LOOP
+    IF p.stock_qty < 10 THEN
+      UPDATE products SET restock_status = 'Critical' WHERE product_id = p.product_id;
+      DBMS_OUTPUT.PUT_LINE(p.product_name||' -> Critical');
+    ELSIF p.stock_qty BETWEEN 10 AND 50 THEN
+      UPDATE products SET restock_status = 'Low' WHERE product_id = p.product_id;
+      DBMS_OUTPUT.PUT_LINE(p.product_name||' -> Low');
+    ELSE
+      UPDATE products SET restock_status = 'OK' WHERE product_id = p.product_id;
+      DBMS_OUTPUT.PUT_LINE(p.product_name||' -> OK');
+    END IF;
+  END LOOP;
+  COMMIT;
+END;
+/
+
+
+
+Exercise 16: Monthly Sales Performance
+Question:
+Write a cursor to calculate the total sales per employee for the current month. If an employee’s sales are below 5000, mark them as “Needs Improvement”, otherwise mark as “Good Performer”.
+
+Solution (PL/SQL):
+
+DECLARE
+  CURSOR c_emp_sales IS
+    SELECT e.employee_id, e.first_name || ' ' || e.last_name AS name, NVL(SUM(s.amount),0) AS total_sales
+    FROM employees e
+    LEFT JOIN sales s ON e.employee_id = s.employee_id AND TRUNC(s.sale_date,'MM') = TRUNC(SYSDATE,'MM')
+    GROUP BY e.employee_id, e.first_name, e.last_name;
+BEGIN
+  FOR r IN c_emp_sales LOOP
+    IF r.total_sales < 5000 THEN
+      DBMS_OUTPUT.PUT_LINE(r.name||' | Total: '||TO_CHAR(r.total_sales)||' | Status: Needs Improvement');
+    ELSE
+      DBMS_OUTPUT.PUT_LINE(r.name||' | Total: '||TO_CHAR(r.total_sales)||' | Status: Good Performer');
+    END IF;
+  END LOOP;
+END;
+/
+
+
+
+Exercise 17: Employee Bonus Distribution
+Question:
+Using a cursor, calculate a bonus for each employee as follows:
+
+If salary < 1000 → bonus = 15% of salary
+
+If salary between 1000 and 2000 → bonus = 10%
+
+If salary > 2000 → bonus = 5%
+Display employee name, salary, and bonus.
+
+Solution (PL/SQL):
+
+DECLARE
+  CURSOR c_emp IS
+    SELECT first_name || ' ' || last_name AS name, salary FROM employees;
+  v_bonus NUMBER;
+BEGIN
+  FOR r IN c_emp LOOP
+    IF r.salary < 1000 THEN
+      v_bonus := r.salary * 0.15;
+    ELSIF r.salary BETWEEN 1000 AND 2000 THEN
+      v_bonus := r.salary * 0.10;
+    ELSE
+      v_bonus := r.salary * 0.05;
+    END IF;
+    DBMS_OUTPUT.PUT_LINE(r.name||' | Salary: '||TO_CHAR(r.salary)||' | Bonus: '||TO_CHAR(ROUND(v_bonus,2)));
+  END LOOP;
+END;
+/
+
+
+
+Exercise 18: High Value Customer Detection
+Question:
+Write a cursor to identify customers whose total order value exceeds 10,000. Display customer name, number of orders, and total value.
+
+Solution (PL/SQL):
+
+DECLARE
+  CURSOR c_high IS
+    SELECT c.customer_name, COUNT(o.order_id) AS num_orders, NVL(SUM(o.total_amt),0) AS total_value
+    FROM customers c
+    JOIN orders o ON c.customer_id = o.customer_id
+    GROUP BY c.customer_name
+    HAVING NVL(SUM(o.total_amt),0) > 10000;
+BEGIN
+  FOR r IN c_high LOOP
+    DBMS_OUTPUT.PUT_LINE('Customer: '||r.customer_name||' | Orders: '||r.num_orders||' | Total: '||TO_CHAR(r.total_value));
+  END LOOP;
+END;
+/
+
+
